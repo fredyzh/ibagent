@@ -1,6 +1,7 @@
 package com.stabletrader.v2.ibagent.jobs;
 
 import java.io.IOException;
+import java.security.cert.CertificateException;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Arrays;
@@ -78,6 +79,9 @@ public class IBRealTimeDataRequestsJob extends IBDataRequestBase{
 			} catch (IOException e) {
 				logger.log(Level.ERROR, () -> e);
 				throw new RuntimeException(e);
+			} catch (CertificateException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
 			
 			if(!super.ibWrapper.isConnected()){

@@ -2,8 +2,6 @@ package com.stabletrader.v2.ibagent.data;
 
 import java.beans.JavaBean;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

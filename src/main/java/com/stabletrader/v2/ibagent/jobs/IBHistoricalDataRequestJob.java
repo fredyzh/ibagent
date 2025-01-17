@@ -1,6 +1,7 @@
 package com.stabletrader.v2.ibagent.jobs;
 
 import java.io.IOException;
+import java.security.cert.CertificateException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -78,7 +79,12 @@ public class IBHistoricalDataRequestJob extends IBDataRequestBase {
 
 	private Runnable iBTask = () -> {
 		try {
-			super.ibWrapper.init();
+			try {
+				super.ibWrapper.init();
+			} catch (CertificateException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 		} catch (IOException e) {
 			logger.log(Level.ERROR, () -> e);
 			throw new RuntimeException(e);
@@ -98,9 +104,9 @@ public class IBHistoricalDataRequestJob extends IBDataRequestBase {
 		}
 		deQueExecutor = Executors.newScheduledThreadPool(1);
 		ScheduledFuture<?> future = deQueExecutor.scheduleAtFixedRate(super.ibWrapper.getHistoricalDequeueRunnable(), 1,
-				5, TimeUnit.SECONDS);
+				10, TimeUnit.SECONDS);
 		try {
-			future.get(10, TimeUnit.SECONDS);
+			future.get(5, TimeUnit.SECONDS);
 		}catch (TimeoutException e) {
 		}catch (InterruptedException e) {
 			logger.log(Level.ERROR, () -> e);
@@ -115,6 +121,8 @@ public class IBHistoricalDataRequestJob extends IBDataRequestBase {
 		Map<Integer, StockBean> ibMap = super.ibWrapper.getStockByIDMap();
 		List<String> symbolList = historicalJobRequest.getSymbols();
 		if (!symbolList.isEmpty()) {
+			logger.log(Level.DEBUG, () -> "All".equals(symbolList.get(0)));
+			logger.log(Level.DEBUG, () -> symbolList.size());
 			if (symbolList.size() == 1 && "All".equals(symbolList.get(0))) {
 				count = 0;
 				for (StockBean bean : ibMap.values()) {
@@ -129,7 +137,7 @@ public class IBHistoricalDataRequestJob extends IBDataRequestBase {
 							Types.WhatToShow.TRADES.name());
 					logger.log(Level.DEBUG, () -> bean.getStockSymbol() + " is rquested.");
 					try {
-						TimeUnit.SECONDS.sleep(1);
+						TimeUnit.MILLISECONDS.sleep(200);
 					} catch (InterruptedException e) {
 						logger.log(Level.ERROR, () -> e);
 					}

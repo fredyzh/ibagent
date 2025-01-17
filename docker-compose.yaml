@@ -1,0 +1,18 @@
+version: "3"
+services:
+  ibagent:
+    image: java-ibagent-api-4:latest
+    restart: always
+    environment:
+      - app.dataservice.stock.urlbase=http://host.docker.internal:9191/
+      - server.port=9292
+    ports:
+      - "9292:9292"
+
+  ubuntu:
+    image: ubuntu
+    restart: always
+    container_name: ubuntu
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: sleep infinity

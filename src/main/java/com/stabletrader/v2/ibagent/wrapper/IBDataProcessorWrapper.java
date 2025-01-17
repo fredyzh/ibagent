@@ -1,6 +1,7 @@
 package com.stabletrader.v2.ibagent.wrapper;
 
 import java.io.IOException;
+import java.security.cert.CertificateException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -55,6 +56,7 @@ import com.stabletrader.v2.ibagent.data.RealTimeStockBean;
 import com.stabletrader.v2.ibagent.data.StockBean;
 import com.stabletrader.v2.ibagent.dataservice.DataService;
 import com.stabletrader.v2.ibagent.dataservice.PropertyEnvironmentAware;
+import com.stabletrader.v2.ibagent.grpc.GrpcDataService;
 
 @Service
 public class IBDataProcessorWrapper implements EWrapper {
@@ -76,10 +78,16 @@ public class IBDataProcessorWrapper implements EWrapper {
 	@Autowired
 	private DataService dataService;
 
+	@Autowired
+	private GrpcDataService grpcDataService;
+
 	private EJavaSignal m_signal = new EJavaSignal();
 	private EClientSocket m_client = new EClientSocket(this, m_signal);
 	private EReader m_reader;
 	private String baseurl;
+	private String localUrl;
+	private String grpcLocalUrl;
+	private String dataGrpcServicePort;
 	private volatile String savePath;
 
 	private boolean isInit = false;
@@ -97,33 +105,57 @@ public class IBDataProcessorWrapper implements EWrapper {
 			processHisDeque();
 		} catch (InterruptedException e) {
 			logger.log(Level.DEBUG, () -> e);
+		} catch (CertificateException e) {
+			logger.log(Level.DEBUG, () -> e);
+		} catch (IOException e) {
+			logger.log(Level.DEBUG, () -> e);
 		}
 	};
 
-	public void init() throws IOException {
+	public void init() throws CertificateException, IOException {
 		if (!isInit) {
-			baseurl = env.getProperty("app.dataservice.stock.urlbase");
-			List<Object> stockJsonList = dataService.getStockList(baseurl);
+			boolean deployEnv = Boolean.valueOf(env.getProperty("deploy.env.docker"));
+			if (deployEnv) {
+				localUrl = env.getProperty("app.dataservice.stock.docker.urlbase");
+				grpcLocalUrl = env.getProperty("app.dataservice.stock.docker.grpc.urlbase");
+			} else {
+				localUrl = env.getProperty("app.dataservice.stock.local.urlbase");
+				grpcLocalUrl = env.getProperty("app.dataservice.stock.local.grpc.urlbase");
+			}
 
-			stockJsonList.stream().forEach((o) -> {
-				if (o instanceof Map) {
-					Map<String, Object> map = (Map<String, Object>) o;
-					map.entrySet().forEach((entry) -> {
-						if (stockBean == null) {
-							stockBean = new StockBean();
-						}
+			String dataServicePort = env.getProperty("app.dataservice.stock.port");
+			dataGrpcServicePort = env.getProperty("app.dataservice.stock.grpc.port");
 
-						if ("id".equals(entry.getKey())) {
-							stockBean.setId((Integer) entry.getValue());
-						} else {
-							stockBean.setStockSymbol((String) entry.getValue());
-							stockByIDMap.put(stockBean.getId(), stockBean);
-							stockBySymbolMap.put(stockBean.getStockSymbol(), stockBean);
-							stockBean = null;
-						}
-					});
-				}
+			List<StockBean> stockJsonList = grpcDataService.getStockList(grpcLocalUrl, dataGrpcServicePort);
+			// System.out.println(stockJsonList);
+			stockJsonList.stream().forEach((stockBean) -> {
+				stockByIDMap.put(stockBean.getId(), stockBean);
+				stockBySymbolMap.put(stockBean.getStockSymbol(), stockBean);
 			});
+
+			baseurl = localUrl + ":" + dataServicePort + "/";
+			//
+			// List<Object> stockJsonList = dataService.getStockList(baseurl);
+			//
+			// stockJsonList.stream().forEach((o) -> {
+			// if (o instanceof Map) {
+			// Map<String, Object> map = (Map<String, Object>) o;
+			// map.entrySet().forEach((entry) -> {
+			// if (stockBean == null) {
+			// stockBean = new StockBean();
+			// }
+			//
+			// if ("id".equals(entry.getKey())) {
+			// stockBean.setId((Integer) entry.getValue());
+			// } else {
+			// stockBean.setStockSymbol((String) entry.getValue());
+			// stockByIDMap.put(stockBean.getId(), stockBean);
+			// stockBySymbolMap.put(stockBean.getStockSymbol(), stockBean);
+			// stockBean = null;
+			// }
+			// });
+			// }
+			// });
 			isInit = true;
 			// System.out.println(stockByIDMap);
 			// System.out.println(stockBySymbolMap);
@@ -133,7 +165,9 @@ public class IBDataProcessorWrapper implements EWrapper {
 
 	public void connectTWS(int cid) {
 		if (!m_client.isConnected()) {
-			m_client.eConnect(null, 7777, cid);
+			String url = localUrl.replace("http://", "");
+			System.out.println(cid);
+			m_client.eConnect(url, 7777, cid);
 		}
 
 		if (m_client.isConnected()) {
@@ -755,7 +789,7 @@ public class IBDataProcessorWrapper implements EWrapper {
 
 	}
 
-/////////////////////////////
+	/////////////////////////////
 	@Override
 	public void realtimeBar(int reqId, long time, double open, double high, double low, double close, Decimal volume,
 			Decimal wap, int count) {
@@ -787,8 +821,9 @@ public class IBDataProcessorWrapper implements EWrapper {
 	@Override
 	public void historicalData(int id, Bar bar) {
 		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
-		HistoicalStockBean bean = new HistoicalStockBean(id, LocalDate.parse(bar.time(), formatter), bar.open(), bar.high(), bar.low(), 
-				bar.close(), Double.valueOf(bar.wap().toString()), Long.valueOf(bar.volume().toString()), Long.valueOf(bar.count()));
+		HistoicalStockBean bean = new HistoicalStockBean(id, LocalDate.parse(bar.time(), formatter), bar.open(),
+				bar.high(), bar.low(), bar.close(), Double.valueOf(bar.wap().toString()),
+				Long.valueOf(bar.volume().longValue()), Long.valueOf(bar.count()));
 		try {
 			historyDailyBlockingQueue.put(bean);
 		} catch (InterruptedException e) {
@@ -796,18 +831,24 @@ public class IBDataProcessorWrapper implements EWrapper {
 		}
 	}
 
-	private void processHisDeque() throws InterruptedException {
+	private void processHisDeque() throws InterruptedException, CertificateException, IOException {
 		hisTempList.clear();
 		while (!historyDailyBlockingQueue.isEmpty()) {
 			hisTempList.add(historyDailyBlockingQueue.take());
+
+			if ((hisTempList.size() >= 5000)){
+				break;
+			}
 		}
-		
-		if(hisTempList.size()>0) {
-			logger.log(Level.DEBUG, () -> "save total: " + hisTempList.size());
-			dataService.saveHistoricalBean(baseurl, savePath, hisTempList);
-		}else {
-			logger.log(Level.WARN, () -> "save total: " + hisTempList.size());
+
+		if (hisTempList.size() > 0) {
+			logger.log(Level.DEBUG, () -> "##save total: " + hisTempList.size());
+			// dataService.saveHistoricalBean(baseurl, savePath, hisTempList);
+			grpcDataService.saveHistoricalBean(grpcLocalUrl, dataGrpcServicePort, hisTempList);
 		}
+		// else {
+		// logger.log(Level.WARN, () -> "save total: " + hisTempList.size());
+		// }
 	}
 
 }

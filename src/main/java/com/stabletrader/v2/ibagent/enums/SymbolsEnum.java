@@ -42,7 +42,13 @@ public enum SymbolsEnum {
     MCD("MCD","MCD", false, false),
     TSLA("TSLA","TSLA", true, true),
     UNH("UNH","UNH", true, true),
-    V("V","V", true, true)
+    V("V","V", true, true),
+	AVGO("AVGO","AVGO", false, true),
+	COST("COST","COST", true, false),
+	LLY("LLY","LLY", true, true),
+	CRM("CRM","CRM", false, false),
+	SOXX("SOXX","CRM", false, false),
+	TRV("TRV","TRV", false, false)
 	;
 	
 	private String IBSymbol;

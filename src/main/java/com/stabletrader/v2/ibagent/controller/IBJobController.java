@@ -1,6 +1,7 @@
 package com.stabletrader.v2.ibagent.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -13,14 +14,15 @@ import com.stabletrader.v2.ibagent.jobs.IBRealTimeDataRequestsJob;
 
 @RestController
 public class IBJobController {
-	@Autowired
 	private IBRealTimeDataRequestsJob ibRealTimeDataRequestsJob;
-	
-	@Autowired
+
 	private IBHistoricalDataRequestJob ibHistoricalDataRequestJob;
-	
-	
-	
+
+	public IBJobController(IBRealTimeDataRequestsJob ibRealTimeDataRequestsJob, IBHistoricalDataRequestJob ibHistoricalDataRequestJob) {
+		this.ibRealTimeDataRequestsJob = ibRealTimeDataRequestsJob;
+		this.ibHistoricalDataRequestJob = ibHistoricalDataRequestJob;
+	}
+
 	@PostMapping("/ibJobs/startRealTimeJob")
 	public JobResponse startRealTimeJob(@RequestBody RealTimeJobRequest realTimeJob) {
 		ibRealTimeDataRequestsJob.setActiveSymbol(realTimeJob.getActiveSymbolList());
